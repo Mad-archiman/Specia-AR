@@ -40,7 +40,9 @@ export async function PUT(
       await bucket.delete(fileId);
       const buffer = Buffer.from(await file.arrayBuffer());
       const newId = new ObjectId();
-      const uploadStream = bucket.openUploadStreamWithId(newId, file.name, { contentType: 'model/gltf-binary' });
+      const uploadStream = bucket.openUploadStreamWithId(newId, file.name, {
+        metadata: { contentType: 'model/gltf-binary' },
+      });
       await new Promise<void>((resolve, reject) => {
         uploadStream.on('finish', () => resolve());
         uploadStream.on('error', reject);

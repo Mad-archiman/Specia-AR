@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const id = new ObjectId();
     const uploadStream = bucket.openUploadStreamWithId(id, file.name, {
-      contentType: 'model/gltf-binary',
+      metadata: { contentType: 'model/gltf-binary' },
     });
     await new Promise<void>((resolve, reject) => {
       uploadStream.on('finish', () => resolve());
