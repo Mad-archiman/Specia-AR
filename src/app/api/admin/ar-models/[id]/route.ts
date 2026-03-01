@@ -53,14 +53,14 @@ export async function PUT(
       if (geoLocation != null && !clearGeo) set.geoLocation = geoLocation;
       await coll.updateOne(
         { _id: new ObjectId(id) },
-        clearGeo ? { $set: set, $unset: { geoLocation: '' as unknown } } : { $set: set }
+        clearGeo ? { $set: set, $unset: { geoLocation: 1 } } : { $set: set }
       );
     } else {
       const set: Record<string, unknown> = {};
       if (name != null) set.name = name;
       if (geoLocation != null && !clearGeo) set.geoLocation = geoLocation;
       if (Object.keys(set).length > 0) await coll.updateOne({ _id: new ObjectId(id) }, { $set: set });
-      if (clearGeo) await coll.updateOne({ _id: new ObjectId(id) }, { $unset: { geoLocation: '' as unknown } });
+      if (clearGeo) await coll.updateOne({ _id: new ObjectId(id) }, { $unset: { geoLocation: 1 } });
     }
 
     return NextResponse.json({ success: true });
