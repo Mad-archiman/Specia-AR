@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ARViewer } from '@/components/ARViewer';
 import { ControlPanel } from '@/components/ControlPanel';
 import type { MeshItem, ModelSize } from '@/types/mesh';
 
-export default function ARViewerPage() {
+function ARViewerPageContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get('code')?.trim()?.toUpperCase();
   const [meshItems, setMeshItems] = useState<MeshItem[]>([]);
@@ -95,5 +95,25 @@ export default function ARViewerPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function ARViewerPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="relative flex min-h-0 flex-1 w-full">
+          <div
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4"
+            style={{ background: 'linear-gradient(180deg, #281e5a 0%, #50288c 100%)' }}
+          >
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden />
+            <p className="text-white/90">모델 불러오는 중…</p>
+          </div>
+        </main>
+      }
+    >
+      <ARViewerPageContent />
+    </Suspense>
   );
 }
