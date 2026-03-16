@@ -23,7 +23,8 @@ function setupSectionEdgeHighlight(material: THREE.Material, _plane: THREE.Plane
   mat.uniforms.sectionEdgeWidth = { value: SECTION_EDGE_WIDTH };
   mat.uniforms.sectionEdgeEnabled = { value: 0 };
 
-  mat.onBeforeCompile = (shader: THREE.Shader) => {
+  // THREE.Shader 타입은 @types/three에 정의되어 있지 않으므로 any로 처리
+  mat.onBeforeCompile = (shader: any) => {
     shader.uniforms.sectionPlaneNormal = mat.uniforms!.sectionPlaneNormal;
     shader.uniforms.sectionPlaneConstant = mat.uniforms!.sectionPlaneConstant;
     shader.uniforms.sectionEdgeWidth = mat.uniforms!.sectionEdgeWidth;
@@ -353,10 +354,18 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
                 mats.forEach((m: THREE.Material) => {
                   if (m && 'clippingPlanes' in m) {
                     setupSectionEdgeHighlight(m, sectionPlane);
-                    const uniforms = (m as THREE.Material & { uniforms?: Record<string, { value: unknown }> }).uniforms;
-                    if (uniforms?.sectionPlaneNormal) uniforms.sectionPlaneNormal.value.copy(sectionPlane.normal);
-                    if (uniforms?.sectionPlaneConstant) uniforms.sectionPlaneConstant.value = sectionPlane.constant;
-                    if (uniforms?.sectionEdgeEnabled) uniforms.sectionEdgeEnabled.value = 1;
+                    const uniforms = (m as THREE.Material & {
+                      uniforms?: Record<string, { value: any }>;
+                    }).uniforms;
+                    if (uniforms?.sectionPlaneNormal) {
+                      (uniforms.sectionPlaneNormal.value as THREE.Vector3).copy(sectionPlane.normal);
+                    }
+                    if (uniforms?.sectionPlaneConstant) {
+                      (uniforms.sectionPlaneConstant.value as number) = sectionPlane.constant;
+                    }
+                    if (uniforms?.sectionEdgeEnabled) {
+                      (uniforms.sectionEdgeEnabled.value as number) = 1;
+                    }
                     (m as THREE.Material & { clippingPlanes: THREE.Plane[] }).clippingPlanes = [sectionPlane];
                     (m as THREE.Material & { clipIntersection: boolean }).clipIntersection = false;
                   }
