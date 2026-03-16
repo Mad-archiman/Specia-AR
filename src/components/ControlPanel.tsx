@@ -9,10 +9,11 @@ interface ControlPanelProps {
   setMeshItems: React.Dispatch<React.SetStateAction<MeshItem[]>>;
 }
 
-export function ControlPanel({ className = '', meshItems, setMeshItems }: ControlPanelProps) {
+export function ControlPanel({ className = '', meshItems, setMeshItems, onUserInteract }: ControlPanelProps & { onUserInteract?: () => void }) {
   const [expanded, setExpanded] = useState(false);
 
   const handleOpacityChange = (id: string, value: number) => {
+    onUserInteract?.();
     setMeshItems((prev) =>
       prev.map((p) => (p.id === id ? { ...p, opacity: value } : p))
     );
@@ -23,6 +24,9 @@ export function ControlPanel({ className = '', meshItems, setMeshItems }: Contro
       className={`absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm ${className}`}
       role="toolbar"
       aria-label="AR 컨트롤"
+      onPointerDown={() => {
+        onUserInteract?.();
+      }}
     >
       {meshItems.length === 0 ? (
         <div className="p-4">
@@ -32,7 +36,10 @@ export function ControlPanel({ className = '', meshItems, setMeshItems }: Contro
         <>
           <button
             type="button"
-            onClick={() => setExpanded((e) => !e)}
+            onClick={() => {
+              onUserInteract?.();
+              setExpanded((e) => !e);
+            }}
             className="flex w-full items-center justify-between p-4 text-left text-sm text-white transition-opacity hover:opacity-90"
             aria-expanded={expanded}
             aria-label={expanded ? '투명도 패널 접기' : '투명도 패널 펼치기'}

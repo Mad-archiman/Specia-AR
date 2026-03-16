@@ -1323,7 +1323,13 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
           </div>
         )}
         <div className="pointer-events-auto absolute bottom-0 left-0 right-0">
-          <ControlPanel meshItems={meshItems} setMeshItems={setMeshItems} />
+          <ControlPanel
+            meshItems={meshItems}
+            setMeshItems={setMeshItems}
+            onUserInteract={() => {
+              lastUIInteractionRef.current = Date.now();
+            }}
+          />
         </div>
       </div>
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
