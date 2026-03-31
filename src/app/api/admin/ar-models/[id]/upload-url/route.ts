@@ -58,7 +58,8 @@ export async function POST(
     });
   } catch (e) {
     console.error('POST ar-model upload-url (edit):', e);
-    return NextResponse.json({ error: '업로드 URL 생성에 실패했습니다.' }, { status: 500 });
+    const message = e instanceof Error ? e.message : '업로드 URL 생성에 실패했습니다.';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

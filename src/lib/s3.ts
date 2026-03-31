@@ -8,15 +8,17 @@ const PREFIX = process.env.S3_PREFIX ?? 'ar-models/';
 function assertEnv(): void {
   if (!REGION) throw new Error('AWS_REGION이 설정되지 않았습니다.');
   if (!BUCKET) throw new Error('S3_BUCKET이 설정되지 않았습니다.');
+  if (!process.env.AWS_ACCESS_KEY_ID) throw new Error('AWS_ACCESS_KEY_ID가 설정되지 않았습니다.');
+  if (!process.env.AWS_SECRET_ACCESS_KEY) throw new Error('AWS_SECRET_ACCESS_KEY가 설정되지 않았습니다.');
 }
 
-function getCredentials() {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  if (accessKeyId && secretAccessKey) {
-    return { accessKeyId, secretAccessKey };
+function getCredentials(): { accessKeyId: string; secretAccessKey: string } {
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID ?? '';
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY ?? '';
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS 자격증명이 설정되지 않았습니다.');
   }
-  return undefined;
+  return { accessKeyId, secretAccessKey };
 }
 
 function getS3Client(): S3Client {
