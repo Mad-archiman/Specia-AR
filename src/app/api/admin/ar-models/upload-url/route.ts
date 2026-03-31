@@ -15,12 +15,12 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as {
       fileName?: string;
-      contentType?: string;
       size?: number;
     };
 
     const fileName = typeof body.fileName === 'string' ? body.fileName : '';
-    const contentType = typeof body.contentType === 'string' && body.contentType.trim() !== '' ? body.contentType : 'model/gltf-binary';
+    // Presigned URL 서명 안정성을 위해 Content-Type은 고정합니다.
+    const contentType = 'model/gltf-binary';
     const size = typeof body.size === 'number' ? body.size : Number(body.size);
 
     if (!fileName.toLowerCase().endsWith('.glb')) {
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       uploadUrl: presigned.uploadUrl,
       key: presigned.key,
       expiresInSeconds: presigned.expiresInSeconds,
+      contentType,
     });
   } catch (e) {
     console.error('POST ar-model upload-url:', e);

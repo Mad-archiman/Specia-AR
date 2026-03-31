@@ -149,23 +149,22 @@ export default function AdminPage() {
                 if (!file) { alert('GLB 파일을 선택해 주세요.'); return; }
                 setArUploading(true);
                 try {
-                  const contentType = file.type || 'model/gltf-binary';
                   const uploadUrlRes = await fetch('/api/admin/ar-models/upload-url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       fileName: file.name,
-                      contentType,
                       size: file.size,
                     }),
                   });
                   const uploadUrlData = await uploadUrlRes.json();
                   if (!uploadUrlRes.ok) throw new Error(uploadUrlData?.error ?? '업로드 URL 생성 실패');
 
-                  const { uploadUrl, key } = uploadUrlData as { uploadUrl: string; key: string };
+                  const { uploadUrl, key, contentType } = uploadUrlData as { uploadUrl: string; key: string; contentType?: string };
+                  const ct = contentType || 'model/gltf-binary';
                   const putRes = await fetch(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': contentType },
+                    headers: { 'Content-Type': ct },
                     body: file,
                   });
                   if (!putRes.ok) {
@@ -425,23 +424,22 @@ function ArModelEditModal({ model, onClose, onSuccess }: { model: ArModelItem; o
       };
 
       if (file) {
-        const contentType = file.type || 'model/gltf-binary';
         const uploadUrlRes = await fetch(`/api/admin/ar-models/${model._id}/upload-url`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fileName: file.name,
-            contentType,
             size: file.size,
           }),
         });
         const uploadUrlData = await uploadUrlRes.json();
         if (!uploadUrlRes.ok) throw new Error(uploadUrlData?.error ?? '업로드 URL 생성 실패');
 
-        const { uploadUrl, key } = uploadUrlData as { uploadUrl: string; key: string };
+        const { uploadUrl, key, contentType } = uploadUrlData as { uploadUrl: string; key: string; contentType?: string };
+        const ct = contentType || 'model/gltf-binary';
         const putRes = await fetch(uploadUrl, {
           method: 'PUT',
-          headers: { 'Content-Type': contentType },
+          headers: { 'Content-Type': ct },
           body: file,
         });
         if (!putRes.ok) {
