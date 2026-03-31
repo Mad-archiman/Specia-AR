@@ -15,7 +15,7 @@ function ARViewerPageContent() {
   const [modelGeoLocation, setModelGeoLocation] = useState<{ lat: number; lon: number; alt: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [modelReady, setModelReady] = useState(!code || code.length !== 4);
-  const blobUrlRef = useRef<string | null>(null);
+  const modelUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!code || code.length !== 4) {
@@ -30,7 +30,7 @@ function ARViewerPageContent() {
     (async () => {
       try {
         const [modelRes, metaRes] = await Promise.all([
-          fetch(`/api/ar/model?code=${encodeURIComponent(code)}`),
+          fetch(`/api/ar/model-url?code=${encodeURIComponent(code)}`),
           fetch(`/api/ar/model/meta?code=${encodeURIComponent(code)}`),
         ]);
         if (!modelRes.ok) {
@@ -39,11 +39,17 @@ function ARViewerPageContent() {
           if (!cancelled) setModelReady(true);
           return;
         }
-        const blob = await modelRes.blob();
+        const modelUrlData = await modelRes.json();
         if (cancelled) return;
-        if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
-        const url = URL.createObjectURL(blob);
-        blobUrlRef.current = url;
+        const url = modelUrlData?.url as string | undefined;
+        if (!url) {
+          if (!cancelled) {
+            setLoadError('모델 URL을 불러올 수 없습니다.');
+            setModelReady(true);
+          }
+          return;
+        }
+        modelUrlRef.current = url;
         setModelUrl(url);
         if (metaRes.ok) {
           const meta = await metaRes.json();
@@ -59,10 +65,7 @@ function ARViewerPageContent() {
     })();
     return () => {
       cancelled = true;
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-        blobUrlRef.current = null;
-      }
+      modelUrlRef.current = null;
     };
   }, [code]);
 

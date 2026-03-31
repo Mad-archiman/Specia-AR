@@ -149,13 +149,48 @@ export default function AdminPage() {
                 if (!file) { alert('GLB 파일을 선택해 주세요.'); return; }
                 setArUploading(true);
                 try {
-                  const fd = new FormData();
-                  fd.append('file', file);
-                  if (nameInput?.value) fd.append('name', nameInput.value);
-                  const res = await fetch('/api/admin/ar-models', { method: 'POST', body: fd });
-                  const data = await res.json();
-                  if (res.ok) { alert(`업로드 완료. 지정번호: ${data.code}`); fileInput.value = ''; if (nameInput) nameInput.value = ''; fetchArModels(); }
-                  else alert(data.error ?? '업로드 실패');
+                  const contentType = file.type || 'model/gltf-binary';
+                  const uploadUrlRes = await fetch('/api/admin/ar-models/upload-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      fileName: file.name,
+                      contentType,
+                      size: file.size,
+                    }),
+                  });
+                  const uploadUrlData = await uploadUrlRes.json();
+                  if (!uploadUrlRes.ok) throw new Error(uploadUrlData?.error ?? '업로드 URL 생성 실패');
+
+                  const { uploadUrl, key } = uploadUrlData as { uploadUrl: string; key: string };
+                  const putRes = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': contentType },
+                    body: file,
+                  });
+                  if (!putRes.ok) {
+                    const putErr = await putRes.text().catch(() => '');
+                    throw new Error(`S3 업로드 실패${putErr ? `: ${putErr}` : ''}`);
+                  }
+
+                  const completeRes = await fetch('/api/admin/ar-models/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      key,
+                      name: nameInput?.value ?? '',
+                      originalFileName: file.name,
+                    }),
+                  });
+                  const completeData = await completeRes.json();
+                  if (completeRes.ok) {
+                    alert(`업로드 완료. 지정번호: ${completeData.code}`);
+                    fileInput.value = '';
+                    if (nameInput) nameInput.value = '';
+                    fetchArModels();
+                  } else {
+                    alert(completeData.error ?? '업로드 실패');
+                  }
                 } finally { setArUploading(false); }
               }}
             >
@@ -382,13 +417,46 @@ function ArModelEditModal({ model, onClose, onSuccess }: { model: ArModelItem; o
     setError('');
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.append('name', name.trim());
-      if (file) fd.append('file', file);
-      fd.append('lat', lat.trim());
-      fd.append('lon', lon.trim());
-      fd.append('alt', alt.trim());
-      const res = await fetch(`/api/admin/ar-models/${model._id}`, { method: 'PUT', body: fd });
+      const payload: Record<string, unknown> = {
+        name: name.trim(),
+        lat: lat.trim(),
+        lon: lon.trim(),
+        alt: alt.trim(),
+      };
+
+      if (file) {
+        const contentType = file.type || 'model/gltf-binary';
+        const uploadUrlRes = await fetch(`/api/admin/ar-models/${model._id}/upload-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType,
+            size: file.size,
+          }),
+        });
+        const uploadUrlData = await uploadUrlRes.json();
+        if (!uploadUrlRes.ok) throw new Error(uploadUrlData?.error ?? '업로드 URL 생성 실패');
+
+        const { uploadUrl, key } = uploadUrlData as { uploadUrl: string; key: string };
+        const putRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': contentType },
+          body: file,
+        });
+        if (!putRes.ok) {
+          const putErr = await putRes.text().catch(() => '');
+          throw new Error(`S3 업로드 실패${putErr ? `: ${putErr}` : ''}`);
+        }
+
+        payload.s3Key = key;
+      }
+
+      const res = await fetch(`/api/admin/ar-models/${model._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
       const data = await res.json();
       if (res.ok) onSuccess();
       else setError(data.error ?? '수정 실패');

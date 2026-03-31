@@ -41,9 +41,17 @@ export interface GeoLocation {
 export interface ArModelDoc {
   _id?: unknown;
   code: string;
-  fileId: unknown;
+  fileId?: unknown;
   name?: string;
   geoLocation?: GeoLocation;
+  storage?: {
+    provider: 's3';
+    bucket: string;
+    region: string;
+    key: string;
+    contentType?: string;
+    size?: number;
+  };
   createdAt?: Date;
 }
 
