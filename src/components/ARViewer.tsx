@@ -176,6 +176,8 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
   const [menuExpanded, setMenuExpanded] = useState(false);
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const [locationModeActive, setLocationModeActive] = useState(false);
+  const [heightOffsetMm, setHeightOffsetMm] = useState(0);
+  const [currentAltitude, setCurrentAltitude] = useState<number | null>(null);
   const [locationOffsetPanelExpanded, setLocationOffsetPanelExpanded] = useState(true);
   const [locationRefreshLoading, setLocationRefreshLoading] = useState(false);
   const [locationOnError, setLocationOnError] = useState<string | null>(null);
@@ -607,12 +609,15 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
           }
 
           const model = gltf.scene;
+          model.position.y = heightOffsetMm / 1000;
           ctx.scene.add(model);
           loadedSceneRef.current = model;
 
           const arClone = model.clone();
+          arClone.position.y = heightOffsetMm / 1000;
           arPlaceableRef.current = arClone;
           const arGeoClone = model.clone();
+          arGeoClone.position.y = heightOffsetMm / 1000;
           arPlaceableGeoRef.current = arGeoClone;
 
           const meshes: MeshItem[] = [];
@@ -651,7 +656,7 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
         }
       );
     },
-    [setMeshItems, setModelSize]
+    [heightOffsetMm, setMeshItems, setModelSize]
   );
 
   useEffect(() => {
@@ -929,6 +934,28 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
     timeoutId: ReturnType<typeof setTimeout>;
     intervalId: ReturnType<typeof setInterval> | null;
   } | null>(null);
+  const heightHoldRepeatRef = useRef<{
+    timeoutId: ReturnType<typeof setTimeout>;
+    intervalId: ReturnType<typeof setInterval> | null;
+  } | null>(null);
+
+  const applyHeightOffsetDelta = useCallback((deltaMm: number) => {
+    const deltaMeters = deltaMm / 1000;
+    setHeightOffsetMm((prev) => prev + deltaMm);
+    const loaded = loadedSceneRef.current;
+    if (loaded) loaded.position.y += deltaMeters;
+    const arPlaceable = arPlaceableRef.current;
+    if (arPlaceable) arPlaceable.position.y += deltaMeters;
+    const arPlaceableGeo = arPlaceableGeoRef.current;
+    if (arPlaceableGeo) arPlaceableGeo.position.y += deltaMeters;
+    tapPlacedRef.current.forEach((obj) => {
+      obj.position.y += deltaMeters;
+    });
+    const geoPlaced = geoPlacedRef.current;
+    if (geoPlaced) geoPlaced.position.y += deltaMeters;
+    const marker = geoMarkerRef.current;
+    if (marker) marker.position.y += deltaMeters;
+  }, []);
 
   const applyOffsetAndReplace = useCallback(
     (offset: { lat: number; lon: number; alt: number }) => {
@@ -994,6 +1021,41 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
     }
   }, []);
 
+  const clearHeightHoldRepeat = useCallback(() => {
+    if (heightHoldRepeatRef.current) {
+      clearTimeout(heightHoldRepeatRef.current.timeoutId);
+      if (heightHoldRepeatRef.current.intervalId) clearInterval(heightHoldRepeatRef.current.intervalId);
+      heightHoldRepeatRef.current = null;
+    }
+  }, []);
+
+  const makeHeightButtonHandlers = useCallback(
+    (deltaMm: number) => ({
+      onPointerDown: (e: React.PointerEvent) => {
+        e.preventDefault();
+        applyHeightOffsetDelta(deltaMm);
+        clearHeightHoldRepeat();
+        const timeoutId = setTimeout(() => {
+          const intervalId = setInterval(() => {
+            applyHeightOffsetDelta(deltaMm);
+          }, 60);
+          if (heightHoldRepeatRef.current) {
+            heightHoldRepeatRef.current.intervalId = intervalId;
+          }
+        }, 300);
+        heightHoldRepeatRef.current = {
+          timeoutId,
+          intervalId: null,
+        };
+      },
+      onPointerUp: clearHeightHoldRepeat,
+      onPointerLeave: clearHeightHoldRepeat,
+      onPointerCancel: clearHeightHoldRepeat,
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    }),
+    [applyHeightOffsetDelta, clearHeightHoldRepeat]
+  );
+
   const handleLocationRefresh = useCallback(() => {
     const geo = modelGeoLocationRef.current;
     if (!geo) return;
@@ -1041,6 +1103,27 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   }, [applyOffsetAndReplace]);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const alt = pos.coords.altitude;
+        if (typeof alt === 'number' && !Number.isNaN(alt)) {
+          setCurrentAltitude(alt);
+        } else {
+          setCurrentAltitude(null);
+        }
+      },
+      () => {
+        setCurrentAltitude(null);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+    );
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
 
   const makeOffsetButtonHandlers = useCallback(
     (dLat: number, dLon: number, dAlt: number) => ({
@@ -1142,6 +1225,36 @@ export function ARViewer({ className = '', meshItems, setMeshItems, setModelSize
               SECTION ON
             </button>
           )}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {}}
+              className="rounded border border-white/80 bg-black/50 px-4 py-2 text-sm text-white opacity-90 outline-none transition-opacity hover:opacity-100"
+              aria-label="Height label"
+            >
+              HEIGHT
+            </button>
+            <button
+              type="button"
+              {...makeHeightButtonHandlers(100)}
+              className="rounded border border-white/80 bg-black/50 px-3 py-2 text-sm text-white opacity-90 outline-none transition-opacity hover:opacity-100"
+              aria-label="높이 증가"
+            >
+              △
+            </button>
+            <button
+              type="button"
+              {...makeHeightButtonHandlers(-100)}
+              className="rounded border border-white/80 bg-black/50 px-3 py-2 text-sm text-white opacity-90 outline-none transition-opacity hover:opacity-100"
+              aria-label="높이 감소"
+            >
+              ▽
+            </button>
+          </div>
+        </div>
+        <div className="pointer-events-none absolute bottom-16 left-1/2 z-10 min-w-[260px] -translate-x-1/2 whitespace-nowrap rounded bg-black/55 px-4 py-1.5 text-xs text-white/90">
+          내 고도: {currentAltitude != null ? `${currentAltitude.toFixed(1)} m` : '확인 중'}
+          <span className="ml-2 text-white/70">| 모델 높이: {(heightOffsetMm / 1000).toFixed(1)} m</span>
         </div>
         {locationModeActive && (
           <div
