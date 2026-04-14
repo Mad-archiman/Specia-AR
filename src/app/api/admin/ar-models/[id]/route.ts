@@ -90,6 +90,7 @@ export async function PUT(
 
       const set: Record<string, unknown> = {};
       const unset: Record<string, 1> = {};
+      let s3DeleteResult: { warning?: string } = {};
 
       if (name != null) set.name = name;
       if (geoLocation != null && !clearGeo) set.geoLocation = geoLocation;
