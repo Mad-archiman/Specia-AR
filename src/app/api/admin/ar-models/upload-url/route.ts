@@ -4,7 +4,7 @@ import { getPresignedUploadUrl } from '@/lib/s3';
 
 export const runtime = 'nodejs';
 
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB 목표
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200MB 목표
 
 export async function POST(request: Request) {
   try {
