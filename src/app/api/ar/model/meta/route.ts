@@ -19,7 +19,12 @@ export async function GET(request: Request) {
     }
 
     if (!doc.geoLocation || typeof doc.geoLocation.lat !== 'number' || typeof doc.geoLocation.lon !== 'number') {
-      return NextResponse.json({ error: '이 모델에는 위치 정보가 설정되지 않았습니다.' }, { status: 404 });
+      return NextResponse.json({
+        hasGeoLocation: false,
+        lat: null,
+        lon: null,
+        alt: null,
+      });
     }
 
     const lat = doc.geoLocation.lat;
@@ -28,6 +33,7 @@ export async function GET(request: Request) {
     const alt = geoidToEllipsoid(lat, lon, altGeoid);
 
     return NextResponse.json({
+      hasGeoLocation: true,
       lat,
       lon,
       alt,

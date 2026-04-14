@@ -1,9 +1,41 @@
 import { NextResponse } from 'next/server';
 import { getArModelsCollection, getArModelsBucket } from '@/lib/db';
 import { ObjectId } from 'mongodb';
-import { deleteS3Object, normalizeS3Key } from '@/lib/s3';
+import { deleteS3Object, deleteS3ObjectAt, normalizeS3Key } from '@/lib/s3';
 
 export const runtime = 'nodejs';
+
+function isNonBlockingS3DeleteError(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'Code' in error
+    ? String((error as { Code?: unknown }).Code)
+    : '';
+  return code === 'InvalidAccessKeyId' || code === 'AccessDenied' || code === 'SignatureDoesNotMatch';
+}
+
+async function deleteS3BestEffort(doc: {
+  storage?: { provider?: string; key?: string; bucket?: string; region?: string };
+}): Promise<{ warning?: string }> {
+  if (doc.storage?.provider !== 's3' || !doc.storage.key) return {};
+  try {
+    if (doc.storage.bucket && doc.storage.region) {
+      await deleteS3ObjectAt({
+        key: doc.storage.key,
+        bucket: doc.storage.bucket,
+        region: doc.storage.region,
+        normalizeKey: false,
+      });
+    } else {
+      await deleteS3Object(doc.storage.key);
+    }
+    return {};
+  } catch (error) {
+    if (isNonBlockingS3DeleteError(error)) {
+      console.warn('S3 삭제 스킵(권한/키 불일치):', error);
+      return { warning: 'S3 원본 파일 삭제 권한이 없어 DB 레코드만 삭제/갱신했습니다.' };
+    }
+    throw error;
+  }
+}
 
 export async function PUT(
   request: Request,
@@ -48,9 +80,7 @@ export async function PUT(
 
       if (s3Key) {
         // 기존 스토리지 정리: S3면 기존 객체 삭제, GridFS면 파일 삭제
-        if (doc.storage?.provider === 's3' && doc.storage.key) {
-          await deleteS3Object(doc.storage.key);
-        }
+        const s3DeleteResult = await deleteS3BestEffort(doc);
         if (doc.fileId) {
           const bucket = await getArModelsBucket();
           const fileId = doc.fileId instanceof ObjectId ? doc.fileId : new ObjectId(String(doc.fileId));
@@ -84,7 +114,7 @@ export async function PUT(
       }
 
       await coll.updateOne({ _id: new ObjectId(id) }, update);
-      return NextResponse.json({ success: true });
+      return NextResponse.json({ success: true, ...(s3DeleteResult.warning ? { warning: s3DeleteResult.warning } : {}) });
     }
 
     // Legacy formData path (GridFS replace). Large files still may fail (413).
@@ -125,9 +155,11 @@ export async function PUT(
       const set: Record<string, unknown> = { fileId: newId };
       if (name != null) set.name = name;
       if (geoLocation != null && !clearGeo) set.geoLocation = geoLocation;
+      const unset: Record<string, 1> = { storage: 1 };
+      if (clearGeo) unset.geoLocation = 1;
       await coll.updateOne(
         { _id: new ObjectId(id) },
-        clearGeo ? { $set: set, $unset: { geoLocation: 1 } } : { $set: set }
+        { $set: set, $unset: unset }
       );
     } else {
       const set: Record<string, unknown> = {};
@@ -157,16 +189,14 @@ export async function DELETE(
     const doc = await coll.findOne({ _id: new ObjectId(id) });
     if (!doc) return NextResponse.json({ error: '모델을 찾을 수 없습니다.' }, { status: 404 });
 
-    if (doc.storage?.provider === 's3' && doc.storage.key) {
-      await deleteS3Object(doc.storage.key);
-    }
+    const s3DeleteResult = await deleteS3BestEffort(doc);
     if (doc.fileId) {
       const bucket = await getArModelsBucket();
       const fileId = doc.fileId instanceof ObjectId ? doc.fileId : new ObjectId(String(doc.fileId));
       await bucket.delete(fileId);
     }
     await coll.deleteOne({ _id: new ObjectId(id) });
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, ...(s3DeleteResult.warning ? { warning: s3DeleteResult.warning } : {}) });
   } catch (e) {
     console.error('DELETE ar-model:', e);
     return NextResponse.json({ error: '삭제에 실패했습니다.' }, { status: 500 });

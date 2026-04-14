@@ -11,7 +11,21 @@ export async function getDb(): Promise<Db> {
   if (!uri || typeof uri !== 'string' || uri.trim() === '') {
     throw new Error('MONGODB_URI가 설정되지 않았습니다. .env.local에 MONGODB_URI를 추가해 주세요.');
   }
-  if (db) return db;
+  if (db) {
+    try {
+      await db.command({ ping: 1 });
+      return db;
+    } catch {
+      // 연결이 끊어진 경우(예: TLS 세션 오류) 재연결합니다.
+      try {
+        await client?.close();
+      } catch {
+        // ignore close error
+      }
+      client = null;
+      db = null;
+    }
+  }
   client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 10000,
     connectTimeoutMS: 10000,

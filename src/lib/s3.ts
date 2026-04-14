@@ -21,10 +21,13 @@ function getCredentials(): { accessKeyId: string; secretAccessKey: string } {
   return { accessKeyId, secretAccessKey };
 }
 
-function getS3Client(): S3Client {
-  assertEnv();
+function getS3Client(regionOverride?: string): S3Client {
+  const region = regionOverride ?? REGION;
+  if (!region) throw new Error('AWS_REGION이 설정되지 않았습니다.');
+  if (!process.env.AWS_ACCESS_KEY_ID) throw new Error('AWS_ACCESS_KEY_ID가 설정되지 않았습니다.');
+  if (!process.env.AWS_SECRET_ACCESS_KEY) throw new Error('AWS_SECRET_ACCESS_KEY가 설정되지 않았습니다.');
   return new S3Client({
-    region: REGION,
+    region,
     credentials: getCredentials(),
   });
 }
@@ -50,14 +53,20 @@ export async function getPresignedUploadUrl(params: {
   key: string;
   contentType: string;
   expiresInSeconds?: number;
+  bucket?: string;
+  region?: string;
 }): Promise<{ uploadUrl: string; key: string; expiresInSeconds: number }> {
   const { key, contentType } = params;
   const expiresInSeconds = params.expiresInSeconds ?? 600;
+  const bucket = params.bucket ?? BUCKET;
+  const region = params.region ?? REGION;
+  if (!bucket) throw new Error('S3_BUCKET이 설정되지 않았습니다.');
+  if (!region) throw new Error('AWS_REGION이 설정되지 않았습니다.');
   const s3Key = normalizeS3Key(key);
 
-  const s3 = getS3Client();
+  const s3 = getS3Client(region);
   const command = new PutObjectCommand({
-    Bucket: BUCKET,
+    Bucket: bucket,
     Key: s3Key,
     ContentType: contentType,
   });
@@ -69,14 +78,21 @@ export async function getPresignedUploadUrl(params: {
 export async function getPresignedDownloadUrl(params: {
   key: string;
   expiresInSeconds?: number;
+  bucket?: string;
+  region?: string;
+  normalizeKey?: boolean;
 }): Promise<{ url: string; key: string; expiresInSeconds: number }> {
   const { key } = params;
   const expiresInSeconds = params.expiresInSeconds ?? 600;
-  const s3Key = normalizeS3Key(key);
+  const bucket = params.bucket ?? BUCKET;
+  const region = params.region ?? REGION;
+  if (!bucket) throw new Error('S3_BUCKET이 설정되지 않았습니다.');
+  if (!region) throw new Error('AWS_REGION이 설정되지 않았습니다.');
+  const s3Key = params.normalizeKey === false ? key : normalizeS3Key(key);
 
-  const s3 = getS3Client();
+  const s3 = getS3Client(region);
   const command = new GetObjectCommand({
-    Bucket: BUCKET,
+    Bucket: bucket,
     Key: s3Key,
   });
 
@@ -85,8 +101,36 @@ export async function getPresignedDownloadUrl(params: {
 }
 
 export async function deleteS3Object(key: string): Promise<void> {
-  const s3Key = normalizeS3Key(key);
-  const s3 = getS3Client();
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: s3Key }));
+  assertEnv();
+  await deleteS3ObjectAt({ key, bucket: BUCKET, region: REGION, normalizeKey: true });
+}
+
+export async function deleteS3ObjectAt(params: {
+  key: string;
+  bucket: string;
+  region: string;
+  normalizeKey?: boolean;
+}): Promise<void> {
+  const s3Key = params.normalizeKey === false ? params.key : normalizeS3Key(params.key);
+  const s3 = getS3Client(params.region);
+  await s3.send(new DeleteObjectCommand({ Bucket: params.bucket, Key: s3Key }));
+}
+
+export async function downloadS3Object(params: {
+  key: string;
+  bucket: string;
+  region: string;
+  normalizeKey?: boolean;
+}): Promise<{ buffer: Buffer; contentType?: string }> {
+  const s3Key = params.normalizeKey === false ? params.key : normalizeS3Key(params.key);
+  const s3 = getS3Client(params.region);
+  const res = await s3.send(new GetObjectCommand({ Bucket: params.bucket, Key: s3Key }));
+  const body = res.Body;
+  if (!body) throw new Error('S3 객체 바디가 비어 있습니다.');
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return { buffer: Buffer.concat(chunks), contentType: res.ContentType };
 }
 
